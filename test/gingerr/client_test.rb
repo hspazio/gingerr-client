@@ -31,29 +31,43 @@ class Gingerr::ClientTest < Minitest::Test
 
   	describe '#report!' do
   	  before do
-        @client.host = 'http://localhost:4567'
+        @client.host = 'http://localhost:3000/gingerr'
+        @client.app_id = 123
   	  end
 
   	  it 'creates a success report if no errors raised' do
+        signal = Gingerr::Client::SuccessSignal.new
+
   	  	http_mock = Minitest::Mock.new
-  	  	http_mock.expect(:post_form, true, [URI("#{@client.host}/reports"), {state: :success}])
+  	  	http_mock.expect(
+            :post_form,
+            true,
+            [URI("#{@client.host}/apps/#{@client.app_id}/signals.json"), signal.to_h])
 
-        report = OpenStruct.new(state: nil)
-        @client.report!(report: report, http_client: http_mock)
+        signal = @client.report!(http_client: http_mock)
 
-        assert_equal :success, report.state
+        assert_equal Gingerr::Client::SuccessSignal, signal.class
         http_mock.verify
       end
 
       it 'creates an error report if any errors raised' do
-      	http_mock = Minitest::Mock.new
-  	  	http_mock.expect(:post_form, true, [URI("#{@client.host}/reports"), {state: :error}])
+        begin
+          raise StandardError, 'oops!'
+        rescue => error
+          @error = error
+        end
 
-        report = OpenStruct.new(state: nil)
-        error = StandardError.new('oops!')
-        @client.report!(report: report, error: error, http_client: http_mock)
+        signal = Gingerr::Client::ErrorSignal.new(@error)
 
-        assert_equal :error, report.state
+        http_mock = Minitest::Mock.new
+  	  	http_mock.expect(
+            :post_form,
+            true,
+            [URI("#{@client.host}/apps/#{@client.app_id}/signals.json"), signal.to_h])
+
+        signal = @client.report!(error: @error, http_client: http_mock)
+
+        assert_equal Gingerr::Client::ErrorSignal, signal.class
         http_mock.verify
       end
   	end

@@ -1,16 +1,23 @@
-require "gingerr/client/version"
-require "gingerr/client/report"
-require "net/http"
+require 'gingerr/client/version'
+require 'gingerr/client/report'
+require 'gingerr/client/success_signal'
+require 'gingerr/client/error_signal'
+require 'net/http'
+require 'socket'
+require 'pathname'
 
 module Gingerr
   module Client
     at_exit do
-      puts $!
-      # report!
+      unless ENV['test'] == 'true'
+        puts $!
+        report!
+      end
     end
 
     class << self
-      attr_accessor :host 
+      attr_accessor :host
+      attr_accessor :app_id
       
       def on_error(&callback)
         callbacks[:error] << callback
@@ -20,26 +27,36 @@ module Gingerr
         callbacks[:success] << callback
       end
   
-      def report!(error: $!, report: Report.new, http_client: Net::HTTP)
+      def report!(error: $!, http_client: Net::HTTP)
+        signal = create_signal(error)
+        run_callbacks(error)
+        send_signal(http_client, signal)
+        signal
+      end
+
+      def create_signal(error)
         if error
-          callbacks[:error].each { |callback| callback.call($!) }
-          report.state = :error
+          ErrorSignal.new(error)
+        else
+          SuccessSignal.new
+        end
+      end
+
+      def run_callbacks(error)
+        if error
+          callbacks[:error].each { |callback| callback.call(error) }
         else
           callbacks[:success].each { |callback| callback.call }
-          report.state = :success
         end
-  
-        send_report(http_client, report)
-        report
       end
   
       def callbacks
         @callbacks ||= { error: [], success: [] }
       end
 
-      def send_report(http_client, report)
-        reports_uri = URI("#{host}/reports")
-        http_client.post_form(reports_uri, report.to_h)
+      def send_signal(http_client, signal)
+        new_signal_uri = URI("#{host}/apps/#{app_id}/signals.json")
+        http_client.post_form(new_signal_uri, signal.to_h)
         # unless response.code = '201'
 
       end
