@@ -50,6 +50,8 @@ module Gingerr
         signal
       end
 
+      # TODO: Error/SuccessSignal should represent the object being returned by the API response.
+      # This should be instead SignalInfo which represent the parameters to be sent via the API.
       def create_signal(error)
         if error
           ErrorSignal.new(error)
