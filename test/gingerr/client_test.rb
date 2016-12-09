@@ -29,13 +29,13 @@ class Gingerr::ClientTest < Minitest::Test
       refute_empty @client.callbacks[:success]
   	end
 
-  	describe '#report!' do
+  	describe '#signal' do
   	  before do
         @client.host = 'http://localhost:3000/gingerr'
         @client.app_id = 123
   	  end
 
-  	  it 'creates a success report if no errors raised' do
+  	  it 'sends a success signal if no errors raised' do
         signal = Gingerr::Client::SuccessSignal.new
 
   	  	http_mock = Minitest::Mock.new
@@ -44,13 +44,13 @@ class Gingerr::ClientTest < Minitest::Test
             true,
             [URI("#{@client.host}/apps/#{@client.app_id}/signals.json"), signal.to_h])
 
-        signal = @client.report!(http_client: http_mock)
+        signal = @client.signal(http_client: http_mock)
 
         assert_equal Gingerr::Client::SuccessSignal, signal.class
         http_mock.verify
       end
 
-      it 'creates an error report if any errors raised' do
+      it 'sends an error signal if any errors raised' do
         begin
           raise StandardError, 'oops!'
         rescue => error
@@ -65,11 +65,62 @@ class Gingerr::ClientTest < Minitest::Test
             true,
             [URI("#{@client.host}/apps/#{@client.app_id}/signals.json"), signal.to_h])
 
-        signal = @client.report!(error: @error, http_client: http_mock)
+        signal = @client.signal(@error, http_client: http_mock)
 
         assert_equal Gingerr::Client::ErrorSignal, signal.class
         http_mock.verify
       end
   	end
+
+   describe '#success' do
+     before do
+        @client.host = 'http://localhost:3000/gingerr'
+        @client.app_id = 123
+      end
+
+      it 'sends a success signal' do
+        signal = Gingerr::Client::SuccessSignal.new
+
+        http_mock = Minitest::Mock.new
+        http_mock.expect(
+            :post_form,
+            true,
+            [URI("#{@client.host}/apps/#{@client.app_id}/signals.json"), signal.to_h])
+
+        signal = @client.success(http_client: http_mock)
+
+        assert_equal Gingerr::Client::SuccessSignal, signal.class
+        http_mock.verify
+      end
+    end
+
+    describe '#error' do
+     before do
+        @client.host = 'http://localhost:3000/gingerr'
+        @client.app_id = 123
+      end
+
+      it 'sends an error signal' do
+        begin
+          raise StandardError, 'oops!'
+        rescue => error
+          @error = error
+        end
+
+        signal = Gingerr::Client::ErrorSignal.new(@error)
+
+        http_mock = Minitest::Mock.new
+        http_mock.expect(
+            :post_form,
+            true,
+            [URI("#{@client.host}/apps/#{@client.app_id}/signals.json"), signal.to_h])
+
+        parameters = { custom_param_1: 'param 1', custom_param_2: 'param 2' }
+        signal = @client.error(@error, http_client: http_mock, parameters: parameters)
+
+        assert_equal Gingerr::Client::ErrorSignal, signal.class
+        http_mock.verify
+      end
+    end  
   end
 end

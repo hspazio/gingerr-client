@@ -27,9 +27,25 @@ module Gingerr
         callbacks[:success] << callback
       end
   
-      def report!(error: $!, http_client: Net::HTTP)
-        signal = create_signal(error)
-        run_callbacks(error)
+      def signal(error_obj = $!, http_client: Net::HTTP)
+        signal = if error_obj
+                   error(error_obj, http_client: http_client)
+                 else 
+                   success(http_client: http_client)
+                 end
+        run_callbacks(error_obj)
+        signal
+      end
+
+      def success(http_client: Net::HTTP)
+        signal = SuccessSignal.new
+        send_signal(http_client, signal)
+        signal
+      end
+
+      # TODO: send 'parameters' as additional info via API
+      def error(error_obj = $!, http_client: Net::HTTP, parameters: {})
+        signal = ErrorSignal.new(error_obj)
         send_signal(http_client, signal)
         signal
       end
