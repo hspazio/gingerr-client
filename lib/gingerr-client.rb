@@ -1,7 +1,7 @@
 require 'gingerr-client/version'
 require 'gingerr-client/configuration'
 require 'gingerr-client/notifier'
-require 'gingerr-client/error'
+require 'gingerr-client/error_info'
 require 'gingerr-client/success_signal'
 require 'gingerr-client/error_signal'
 require 'net/http'
