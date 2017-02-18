@@ -8,6 +8,7 @@ class Gingerr::ErrorSignalTest < Minitest::Test
       rescue => error
         @error = error
       end
+
       @signal = Gingerr::Client::ErrorSignal.new(@error)
     end
 
@@ -35,12 +36,14 @@ class Gingerr::ErrorSignalTest < Minitest::Test
       assert_equal @error.backtrace.join("\n"), error.backtrace
     end
 
-    it 'responds to to_h' do
-      params = @signal.to_h
+    it 'responds to to_json' do
+      params = @signal.to_json
+      params = JSON.parse(params, symbolize_names: true)
       assert_equal $$, params[:pid]
       assert_equal false, params[:login].empty?
       assert_equal false, params[:hostname].empty?
       assert_match(/\d+.\d+.\d+.\d+/, params[:ip])
+
       assert_equal @error.class.name, params[:error][:name]
       assert_equal @error.message, params[:error][:message]
       assert_equal File.basename(__FILE__), params[:error][:file]

@@ -1,84 +1,79 @@
 require 'gingerr/client/version'
-require 'gingerr/client/report'
+require 'gingerr/client/error'
 require 'gingerr/client/success_signal'
 require 'gingerr/client/error_signal'
 require 'net/http'
+require 'json'
 require 'socket'
 require 'pathname'
 
 module Gingerr
-  module Client
+  class Client
+    class ClientError < StandardError; end
+    class ServerError < StandardError; end
+
     at_exit do
       unless ENV['test'] == 'true'
         puts $!
-        report!
       end
     end
 
-    class << self
-      attr_accessor :host
-      attr_accessor :app_id
-      
-      def on_error(&callback)
-        callbacks[:error] << callback
-      end
-  
-      def on_success(&callback)
-        callbacks[:success] << callback
-      end
-  
-      def signal(error_obj = $!, http_client: Net::HTTP)
-        signal = if error_obj
-                   error(error_obj, http_client: http_client)
-                 else 
-                   success(http_client: http_client)
-                 end
-        run_callbacks(error_obj)
-        signal
-      end
+    attr_reader :host, :app_id
 
-      def success(http_client: Net::HTTP)
-        signal = SuccessSignal.new
-        send_signal(http_client, signal)
-        signal
-      end
+    def initialize(host:, app_id:)
+      @host = host
+      @app_id = app_id
+    end
 
-      # TODO: send 'parameters' as additional info via API
-      def error(error_obj = $!, http_client: Net::HTTP, parameters: {})
-        signal = ErrorSignal.new(error_obj)
-        send_signal(http_client, signal)
-        signal
-      end
+    def on_error(&callback)
+      callbacks[:error] << callback
+    end
 
-      # TODO: Error/SuccessSignal should represent the object being returned by the API response.
-      # This should be instead SignalInfo which represent the parameters to be sent via the API.
-      def create_signal(error)
-        if error
-          ErrorSignal.new(error)
-        else
-          SuccessSignal.new
-        end
-      end
+    def on_success(&callback)
+      callbacks[:success] << callback
+    end
 
-      def run_callbacks(error)
-        if error
-          callbacks[:error].each { |callback| callback.call(error) }
-        else
-          callbacks[:success].each { |callback| callback.call }
-        end
-      end
-  
-      def callbacks
-        @callbacks ||= { error: [], success: [] }
-      end
+    def notify_success!
+      signal = SuccessSignal.new
+      send_signal(signal)
+      signal
+    end
 
-      def send_signal(http_client, signal)
-        new_signal_uri = URI("#{host}/apps/#{app_id}/signals.json")
-        http_client.post_form(new_signal_uri, signal.to_h)
-        # unless response.code = '201'
+    # TODO: send 'parameters' as additional info via API
+    def notify_error!(error_obj = $!, parameters: {})
+      signal = ErrorSignal.new(error_obj)
+      send_signal(signal)
+      signal
+    end
 
+    private
+
+    def send_signal(signal)
+      uri = URI("#{host}/apps/#{app_id}/signals.json")
+      response = http_post(uri, signal.to_json)
+      validate_response(response)
+    end
+
+    def http_post(uri, json_params)
+      request = Net::HTTP::Post.new(uri, 'Content-Type' => 'application/json')
+      request.body = json_params
+      Net::HTTP.start(uri.hostname, uri.port) do |http|
+        http.request(request)
       end
     end
+
+    def validate_response(response)
+      if response.code == '201'
+        response['location']
+      else
+        if response.code.to_i >= 500
+          raise ServerError, response.body
+        else
+          raise ClientError, response.body
+        end
+      end
+    end
+  end
   
     # TODO: just a sketch. Require tests
     # class Interceptor
@@ -119,6 +114,5 @@ module Gingerr
     #     callback
     #   end
     # end
-  end
 end
 
